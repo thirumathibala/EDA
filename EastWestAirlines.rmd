@@ -1,0 +1,176 @@
+```{r}
+
+install.packages("rmarkdown",repos = "http://cran.us.r-project.org")
+install.packages("cluster",repos = "http://cran.us.r-project.org")
+install.packages("fpc",repos = "http://cran.us.r-project.org")
+install.packages("dendextend",repos = "http://cran.us.r-project.org")
+install.packages("readxl",repos = "http://cran.us.r-project.org")
+
+library(cluster)
+library(fpc)
+library(dendextend)
+library(readxl)
+
+
+
+## Input file read
+mydata<-read.csv(file.choose(),3)
+# View(mydata)
+
+# 1. Loading and preparing data
+mydatawd  <- mydata[,2:11]
+
+as.numeric(mydatawd$cc1_miles)
+as.numeric(mydatawd$cc2_miles)
+as.numeric(mydatawd$cc3_miles)
+
+# distance matrix
+d <- dist(mydatawd, method = "euclidean") 
+
+# Hierarchical Cluster
+fit <- hclust(d, method="complete")
+
+# display dendrogram
+plot(fit)
+
+# Standardize Data
+my_data   <- scale(mydatawd)
+
+# View(my_data)
+
+#Summary of data before standardize
+summary(mydata[,2:11])
+
+#Summary after Standardize
+summary(my_data)
+# distance matrix
+d <- dist(my_data, method = "euclidean") 
+
+# Hierarchical Cluster
+fit <- hclust(d, method="complete")
+
+# display dendrogram
+plot(fit)
+
+# Hierarchical Cluster using Ward method
+fit <- hclust(d, method="ward.D2")
+plot(fit)
+
+
+
+dend <- as.dendrogram(fit)
+
+d2=color_branches(dend,k=5) # auto-coloring 5 clusters of branches.
+plot(d2)
+
+wss = (nrow(my_data)-1)*sum(apply(my_data, 2, var))		 # Determine number of clusters by scree-plot 
+
+for (i in 2:12) wss[i] = sum(kmeans(my_data, centers=i)$withinss)
+
+plot(1:12, wss, type="b", xlab="Number of Clusters", ylab="Within groups sum of squares")   # Look for an "elbow" in the scree plot #
+title(sub = "K-Means Clustering Scree-Plot")
+
+#Based on the above dendograms and scree plot we can infer that there are 3 clusters. So we apply colour code and cut the tree into 3 branches.
+
+# Hierarchical Cluster using Ward method
+fit <- hclust(d, method="ward.D2")
+
+dend <- as.dendrogram(fit)
+
+d2=color_branches(dend,k=3) # auto-coloring 3 clusters of branches.
+plot(d2)
+
+groups      <- cutree(fit, k=3) # cut tree into 3 clusters
+
+#Cluster centroids and classification of groups
+table(groups)
+lapply(split(mydata, groups), colMeans)
+
+#1.	Cluster 1 seems to be comparatively newly registered customers who have high flight transactions however with least flight miles. This indicates that they travel shorter distances. However, their bonus miles and bonus transactions and award points looks higher when compared to the other 2 clusters.  This set of people doesn't need any promotions in the current scenario.
+# 2.	Cluster 2 has the highest Days since enrolled value. So this group may be the ones who are associated with airlines for a long time. However, on seeing their flight transactions in 12 months seems to be very less and hence they need to be given some offers to encourage them to travel more.
+
+# 3.	Cluster 3 has highest average flight miles. With only 63 people, which shows this group is the frequent travellers with high bones miles as well.
+
+
+#Random Sample1 with 95% of data
+input2=mydata[sample(nrow(my_data),replace=F,size=0.95*nrow(mydata)),]
+
+d       <- dist(input2, method = "euclidean")
+res2.hc <- hclust(d, method = "ward.D2" )
+Dend2   <- as.dendrogram(res2.hc)
+
+#Check Stability of clusters
+#Random Sample2 with 95% of data
+input3=mydata[sample(nrow(my_data),replace=F,size=0.95*nrow(mydata)),]
+
+d       <- dist(input3, method = "euclidean")
+res3.hc <- hclust(d, method = "ward.D2" )
+Dend3   <- as.dendrogram(res3.hc)
+
+plot(Dend2)
+plot(Dend3)
+
+#From the dendograms we infer that as both are similar but the direction seems to be different. So we infer data sampling affects the clustering.
+  
+# K means clustering
+## K-means clustering
+set.seed(123)
+kfit<- kmeans(my_data, 3) # 3 cluster solution
+
+#Aggregation of k-means
+
+mydatak     <- data.frame(mydata, kfit$cluster) # append cluster membership
+temp        <- aggregate(mydatak, by=list(kfit$cluster), FUN=mean)
+
+#to find the size of clusters 
+ClusterCo   <- aggregate(mydatak, by=list(kfit$cluster), FUN=sum) 
+#to find the cluster size
+d           <- transform(ClusterCo, clusterSize = kfit.cluster / Group.1)
+d           <- transform(d, kfit.cluster= kfit.cluster/ clusterSize)
+temp$clusterSize   <- d$clusterSize
+temp$clusterPCT    <- (d$clusterSize*100)/3999
+# transpose to change from horizontal to vertical
+temp2       <- t(temp)
+
+round_df <- function(x, digits) {
+  # round all numeric variables
+  # x: data frame 
+  # digits: number of digits to round
+  numeric_columns    <- sapply(x, class) == 'numeric'
+  x[numeric_columns] <-  round(x[numeric_columns], digits)
+  x
+}
+
+temp4       <- round_df(temp2, 2)
+
+#Hierarchical Aggregate calculations
+
+# Hierarchical clustering using Ward's method
+
+groups      <- cutree(fit, k=3) # cut tree into 3 clusters
+membership  <-as.matrix(groups)
+membership  <- data.frame(membership)
+names(membership) <- c("cluster")
+mydatao     <- data.frame(mydata, membership$cluster) # append cluster membership
+
+temp        <- aggregate(mydatao, by=list(membership$cluster), FUN=mean)
+
+temp2       <- t(temp)
+
+round_df <- function(x, digits) {
+   numeric_columns    <- sapply(x, class) == 'numeric'
+  x[numeric_columns] <-  round(x[numeric_columns], digits)
+  x
+}
+
+temp5       <- round_df(temp2, 2)
+
+#The metrics shows a huge difference in the various parameters and hence conclude that the clustering by the above 2 methods doesn't give similar results.
+#
+# Suggestions on offers and Rewards
+#Cluster 2 has to be given more offers.
+#Cluster 1 need to be motivated to do more travel.
+
+
+
+```
